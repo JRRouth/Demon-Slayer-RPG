@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demon Slayer RPG - Adaptive Battle Engine</title>
+    <title>Demon Slayer RPG - Fully Fixed Dual Paths</title>
     <style>
-        /* Keeping your Fridge Tycoon UI aesthetic */
         body { 
             background-color: #0b0f19; 
             color: #e2e8f0; 
@@ -27,7 +26,6 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
         }
 
-        /* Faction Screen Styling */
         #faction-screen { text-align: center; display: block; }
         .faction-title { margin-bottom: 30px; letter-spacing: 1px; }
         .faction-options { display: flex; gap: 20px; }
@@ -47,7 +45,6 @@
         .btn-demon { border: 2px solid #ef4444; color: #ef4444; }
         .btn-demon:hover { background: #ef4444; color: #0b0f19; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); transform: scale(1.03); }
 
-        /* Battle Screen (Hidden by default) */
         #battle-screen { display: none; }
         
         .battle-arena { 
@@ -116,7 +113,6 @@
 <body>
 
 <div class="game-container">
-    <!-- SELECTION PANEL -->
     <div class="panel" id="faction-screen">
         <h2 class="faction-title">CHOOSE YOUR PATH</h2>
         <div class="faction-options">
@@ -125,7 +121,6 @@
         </div>
     </div>
 
-    <!-- BATTLE PANEL (HIDDEN INITIALLY) -->
     <div class="panel" id="battle-screen">
         <div class="battle-arena" id="arena-border">
             <h2 id="enemy-name" class="enemy-title">Opponent</h2>
@@ -194,14 +189,22 @@
         dHP = 100;
         isTurnProcessing = false;
         
-        // Dynamic name generation based on your streak
+        // Refresh player BP for next round loop
+        for (let key in moves) {
+            moves[key].bp = moves[key].maxBp;
+        }
+
+        playerStates.isBlocking = false;
+        playerStates.isCountering = false;
+        
         document.getElementById('enemy-name').textContent = `${factionData[selectedFaction].enemyPrefix}${winStreak + 1}`;
         document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
         document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
         
-        // Render current modifiers
         document.getElementById('streak-display').textContent = `WIN STREAK: ${winStreak} | BOT DAMAGE: +${winStreak * 20}%`;
         document.getElementById('streak-display').style.color = selectedFaction === 'slayer' ? '#3b82f6' : '#ef4444';
+        
+        document.getElementById('combat-log').textContent = `An upgraded foe approaches! Begin round ${winStreak + 1}.`;
         
         updateActionButtons();
     }
@@ -239,32 +242,30 @@
             document.getElementById('combat-log').textContent = `🛡️ You raised your defenses! Mitigation active for this exchange.`;
         } else if (move.type === 'counter') {
             playerStates.isCountering = true;
-            document.getElementById('combat-log').textContent = `⚡ Stance Set! You are waiting for the bot to strike to trigger a counter loop.`;
+            document.getElementById('combat-log').textContent = `⚡ Stance Set! Bracing for the incoming strike...`;
         } else if (move.type === 'heal') {
             pHP = Math.min(maxPHP, pHP + move.power);
             document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
-            document.getElementById('combat-log').textContent = `🩸 Blood Art! Your wounds sew shut, recovering ${move.power} HP.`;
+            document.getElementById('combat-log').textContent = `🩸 Blood Art! Wounds sew shut, recovering ${move.power} HP.`;
         } else {
             dHP = Math.max(0, dHP - move.power);
             document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
-            document.getElementById('combat-log').textContent = `💥 Strike Hit! You used ${move.name} and dealt ${move.power} damage.`;
+            document.getElementById('combat-log').textContent = `💥 Strike Hit! You executed ${move.name} and dealt ${move.power} damage.`;
         }
 
         updateActionButtons();
 
-        // Handle Victory Loop
         if (dHP <= 0) {
             setTimeout(() => {
                 winStreak++;
-                document.getElementById('combat-log').textContent = `🥇 VICTORY! Opponent neutralized. Moving to Win Streak ${winStreak}. Preparing next opponent...`;
-                setTimeout(() => {
-                    setupMatch();
-                }, 2000);
+                document.getElementById('combat-log').textContent = `🥇 VICTORY! Opponent neutralized. Moving to Win Streak ${winStreak}. Loading next tier...`;
+                updateActionButtons(); 
+                setTimeout(() => { setupMatch(); }, 2000);
             }, 600);
             return;
         }
 
-        // --- ADAPTIVE SMART BOT PROCESSOR ---
+        // --- ADAPTIVE SMART BOT TURN (FIXED FACTION LOOKUPS) ---
         setTimeout(() => {
             if (pHP <= 0 || dHP <= 0) {
                 isTurnProcessing = false;
@@ -274,46 +275,52 @@
             let aiMoveName = "";
             let rawAiDamage = 0;
             
-            // 1. BRAIN: Stance Check. If player is countering, the bot halts its attack and focuses instead!
+            // 1. BRAIN: Counter Flag Intercept
             if (playerStates.isCountering && Math.random() > 0.15) { 
-                aiMoveName = selectedFaction === 'slayer' ? "Demon Focus" : "Total Concentration Breathing";
+                // If player is slayer, enemy is demon. If player is demon, enemy is slayer.
+                aiMoveName = selectedFaction === 'slayer' ? "Demon Focus Stance" : "Total Concentration Breathing";
                 rawAiDamage = 0; 
             } 
-            // 2. BRAIN: Kill Shot Matrix. If your HP is below 35%, it unleashes its massive execute move.
+            // 2. BRAIN: Execution Threshold Logic
             else if (pHP < 35) {
                 aiMoveName = selectedFaction === 'slayer' ? "Blood Art: Crimson Rent" : "Water Breathing: Constant Flux";
                 rawAiDamage = 26; 
             } 
-            // 3. Normal smart calculation
+            // 3. BRAIN: Regular Base Move Scaling Rotation
             else {
-                aiMoveName = selectedFaction === 'slayer' ? (Math.random() > 0.4 ? "Violent Bite" : "Claw Rip") : (Math.random() > 0.4 ? "Thrust Strike" : "Form 1: Horizontal Slash");
-                rawAiDamage = aiMoveName === "Violent Bite" || aiMoveName === "Thrust Strike" ? 15 : 10;
+                if (selectedFaction === 'slayer') {
+                    // Enemy is a DEMON
+                    aiMoveName = Math.random() > 0.4 ? "Violent Bite" : "Claw Rip";
+                    rawAiDamage = aiMoveName === "Violent Bite" ? 15 : 10;
+                } else {
+                    // Enemy is a SLAYER
+                    aiMoveName = Math.random() > 0.4 ? "Water Thrust Strike" : "Form 1: Horizontal Slash";
+                    rawAiDamage = aiMoveName === "Water Thrust Strike" ? 16 : 11;
+                }
             }
 
-            // --- PROGRESSION DAMAGE SCALING (20% increase per win) ---
+            // Progression scaling engine calculation
             let damageMultiplier = 1 + (winStreak * 0.20);
             rawAiDamage = Math.floor(rawAiDamage * damageMultiplier);
 
             let finalDamage = rawAiDamage;
             let logMessage = "";
 
-            // Check actions against bot results
             if (rawAiDamage === 0) {
-                logMessage = `🧠 Smart AI! The opponent anticipated your counter strategy, backed off, and setup ${aiMoveName} without hitting your blade.`;
+                logMessage = `🧠 Smart AI! The opponent anticipated your counter, backed off, and used ${aiMoveName}.`;
             } else if (playerStates.isCountering) {
                 finalDamage = 0;
                 let counterDmg = 25; 
                 dHP = Math.max(0, dHP - counterDmg);
-                logMessage = `⚡ Punished! The bot fell for the bait anyway! Your counter completely deflected ${aiMoveName} and slashed back for ${counterDmg} damage!`;
+                logMessage = `⚡ Punished! The bot fell for the bait! Your counter completely deflected ${aiMoveName} and slashed back for ${counterDmg} damage!`;
                 document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
             } else if (playerStates.isBlocking) {
                 finalDamage = Math.floor(rawAiDamage * 0.3); 
-                logMessage = `🛡️ Stance Dampening! Opponent executed ${aiMoveName}. Your block reduced scaling damage down to ${finalDamage}.`;
+                logMessage = `🛡️ Blocked! Opponent executed ${aiMoveName}. Your stance reduced scaling damage to ${finalDamage}.`;
             } else {
                 logMessage = `🚨 Ouch! The bot smashed through your line using ${aiMoveName} for ${finalDamage} damage.`;
             }
 
-            // Clean stance states
             playerStates.isBlocking = false;
             playerStates.isCountering = false;
 
@@ -323,13 +330,13 @@
             
             isTurnProcessing = false;
             
-            // Post-turn win check if counter killed them
             if (dHP <= 0) {
                 winStreak++;
                 document.getElementById('combat-log').textContent += ` 🥇 The counter force broke them! Moving to Win Streak ${winStreak}.`;
+                updateActionButtons();
                 setTimeout(() => { setupMatch(); }, 2000);
             } else if (pHP <= 0) {
-                document.getElementById('combat-log').textContent = `💀 GAME OVER! You were killed by Tier ${winStreak + 1}. Final Win Streak: ${winStreak}. Refresh page to restart your run.`;
+                document.getElementById('combat-log').textContent = `💀 GAME OVER! You died at Tier ${winStreak + 1}. Final Streak: ${winStreak}. Refresh to restart your run.`;
             }
             updateActionButtons();
         }, 1100);
