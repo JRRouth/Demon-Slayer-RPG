@@ -118,8 +118,11 @@
         for (let key in moves) {
             const m = moves[key];
             const btn = document.getElementById(m.elementId);
+            if (!btn) continue;
+            
             btn.textContent = `${m.name} (${m.bp}/${m.maxBp})`;
             
+            // Disable conditions: no BP left, turn is executing, or someone's HP hits 0
             if (m.bp <= 0 || isTurnProcessing || pHP <= 0 || dHP <= 0) {
                 btn.disabled = true;
             } else {
@@ -153,8 +156,12 @@
             return;
         }
 
+        // Trigger Bot Response
         setTimeout(() => {
-            if (pHP <= 0 || dHP <= 0) return;
+            if (pHP <= 0 || dHP <= 0) {
+                isTurnProcessing = false;
+                return;
+            }
 
             let botMove = Math.random() > 0.5 ? "Scratch" : "Bite";
             let botDamage = botMove === "Bite" ? 14 : 9;
@@ -174,8 +181,12 @@
         }, 1000);
     }
 
-    // Run this right away to draw the BP numbers on load
-    updateActionButtons();
+    // Explicit execution queue on document window load
+    window.onload = function() {
+        document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
+        document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
+        updateActionButtons();
+    };
 </script>
 
 </body>
