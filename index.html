@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demon Slayer RPG - Training Mode</title>
+    <title>Demon Slayer RPG - Battle Prototype</title>
     <style>
         /* Keeping your Fridge Tycoon UI aesthetic */
         body { 
@@ -106,12 +106,18 @@
     let pHP = 100, maxPHP = 100;
     let dHP = 100, maxDHP = 100;
     let isTurnProcessing = false;
+
+    // Tactical state flags
+    let playerStates = {
+        isBlocking: false,
+        isCountering: false
+    };
     
     const moves = {
         slash: { name: "Sword Slash", power: 15, maxBp: 20, bp: 20, elementId: "btn-slash" },
         thrust: { name: "Sword Thrust", power: 25, maxBp: 5, bp: 5, elementId: "btn-thrust" },
         block: { name: "Sword Block", power: 0, maxBp: 10, bp: 10, elementId: "btn-block" },
-        counter: { name: "Sword Counter", power: 20, maxBp: 8, bp: 8, elementId: "btn-counter" }
+        counter: { name: "Sword Counter", power: 0, maxBp: 8, bp: 8, elementId: "btn-counter" } // Power is handled conditionally
     };
 
     function updateActionButtons() {
@@ -122,7 +128,6 @@
             
             btn.textContent = `${m.name} (${m.bp}/${m.maxBp})`;
             
-            // Disable conditions: no BP left, turn is executing, or someone's HP hits 0
             if (m.bp <= 0 || isTurnProcessing || pHP <= 0 || dHP <= 0) {
                 btn.disabled = true;
             } else {
@@ -140,11 +145,21 @@
         isTurnProcessing = true;
         move.bp--;
         
-        let damage = move.power;
-        dHP = Math.max(0, dHP - damage);
-        
-        document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
-        document.getElementById('combat-log').textContent = `⚔️ You executed ${move.name}! Dealt ${damage} damage to the Demon.`;
+        // Handle unique tactical statuses
+        if (moveKey === 'block') {
+            playerStates.isBlocking = true;
+            document.getElementById('combat-log').textContent = `🛡️ You raised your blade in a defensive stance! Defenses up for this turn.`;
+        } else if (moveKey === 'counter') {
+            playerStates.isCountering = true;
+            document.getElementById('combat-log').textContent = `⚡ You focused your breathing, waiting to punish the Demon's next incoming strike!`;
+        } else {
+            // Standard Attack Execution
+            let damage = move.power;
+            dHP = Math.max(0, dHP - damage);
+            document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
+            document.getElementById('combat-log').textContent = `⚔️ You executed ${move.name}! Dealt ${damage} damage to the Demon.`;
+        }
+
         updateActionButtons();
         
         if (dHP <= 0) {
@@ -156,7 +171,7 @@
             return;
         }
 
-        // Trigger Bot Response
+        // Trigger Enemy Action Thread
         setTimeout(() => {
             if (pHP <= 0 || dHP <= 0) {
                 isTurnProcessing = false;
@@ -164,24 +179,47 @@
             }
 
             let botMove = Math.random() > 0.5 ? "Scratch" : "Bite";
-            let botDamage = botMove === "Bite" ? 14 : 9;
+            let rawBotDamage = botMove === "Bite" ? 15 : 10;
+            let finalDamage = rawBotDamage;
             
-            pHP = Math.max(0, pHP - botDamage);
-            
+            let logMessage = "";
+
+            // Check defensive calculations
+            if (playerStates.isCountering) {
+                finalDamage = 0;
+                let counterDamage = 20;
+                dHP = Math.max(0, dHP - counterDamage);
+                
+                logMessage = `⚡ Perfect Parry! The Demon lunged with ${botMove} but you deflected it entirely and delivered a devastating counter-strike for ${counterDamage} damage!`;
+                document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
+            } else if (playerStates.isBlocking) {
+                finalDamage = Math.floor(rawBotDamage * 0.3); // 70% damage mitigation
+                logMessage = `🛡️ Absorbed! The Demon lunged with ${botMove}. Thanks to your stance, damage was reduced from ${rawBotDamage} down to ${finalDamage}!`;
+            } else {
+                logMessage = `🩸 Direct Hit! The Demon attacked with ${botMove}! You sustained ${finalDamage} damage.`;
+            }
+
+            // Reset flags for the next round
+            playerStates.isBlocking = false;
+            playerStates.isCountering = false;
+
+            pHP = Math.max(0, pHP - finalDamage);
             document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
-            document.getElementById('combat-log').textContent = `🩸 The Demon countered with ${botMove}! You sustained ${botDamage} damage.`;
+            document.getElementById('combat-log').textContent = logMessage;
             
             isTurnProcessing = false;
             
-            if (pHP <= 0) {
+            // Check win/loss endpoints
+            if (dHP <= 0) {
+                document.getElementById('combat-log').textContent += " 🥇 The counter shattered their stance! VICTORY!";
+            } else if (pHP <= 0) {
                 document.getElementById('combat-log').textContent = "💀 DEFEAT! Your breath training failed. Run endpoint reached.";
             }
             
             updateActionButtons();
-        }, 1000);
+        }, 1200);
     }
 
-    // Explicit execution queue on document window load
     window.onload = function() {
         document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
         document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
