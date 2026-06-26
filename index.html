@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demon Slayer RPG - Stamina Combat System</title>
+    <title>Demon Slayer RPG - Advanced Combat Engine</title>
     <style>
         body { 
             background-color: #0b0f19; 
@@ -68,7 +68,6 @@
         }
         .player-hp-bar { color: #10b981; font-weight: bold; font-size: 1.1rem; text-align: left; margin-bottom: 8px;}
         
-        /* Stamina Bar UI Layout Component */
         .stamina-header { display: flex; justify-content: space-between; color: #eab308; font-weight: bold; font-size: 0.95rem; margin-bottom: 4px; }
         .stamina-track { width: 100%; height: 10px; background: #1e293b; border-radius: 99px; overflow: hidden; }
         .stamina-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #eab308, #f59e0b); transition: width 0.3s ease; }
@@ -154,6 +153,7 @@
             <h2 id="enemy-name" class="enemy-title">Opponent</h2>
             <div id="enemy-hp" class="hp-bar">HP: 100 / 100</div>
             <div id="enemy-stamina-display" style="color: #eab308; font-size: 0.9rem; font-weight: bold; margin-top: 4px;">Opponent Stamina: 100 / 100</div>
+            <div id="enemy-status-display" style="color: #3b82f6; font-size: 0.85rem; font-weight: bold; margin-top: 2px; display: none;">Stance: Concentrated</div>
         </div>
         
         <div id="streak-display" class="streak-counter">WIN STREAK: 0 | BOT DAMAGE: +0%</div>
@@ -170,6 +170,7 @@
         
         <div class="resource-container">
             <div id="player-hp" class="player-hp-bar">Your HP: 100 / 100</div>
+            <div id="player-status-display" style="color: #10b981; font-size: 0.85rem; font-weight: bold; margin-bottom: 6px; display: none;">Stance: Concentrated</div>
             <div class="stamina-section">
                 <div class="stamina-header">
                     <span>STAMINA</span>
@@ -192,7 +193,9 @@
     let selectedFaction = "";
     let winStreak = 0;
 
-    let playerStates = { isBlocking: false, isCountering: false, isResting: false };
+    // Added concentration duration tracking arrays
+    let playerStates = { isBlocking: false, isCountering: false, isResting: false, concentrationTurns: 0 };
+    let aiStates = { concentrationTurns: 0 };
     let moves = null; 
 
     const factionData = {
@@ -204,7 +207,7 @@
                 m2: { name: "Sword Thrust", power: 26, cost: 40, type: "attack" },
                 m3: { name: "Sword Block", power: 0, cost: 20, type: "block" },
                 m4: { name: "Sword Counter", power: 0, cost: 25, type: "counter" },
-                m5: { name: "Total Concentration Breath", power: 0, cost: -50, type: "rest" } // Negative cost adds stamina
+                m5: { name: "Total Concentration Breath", power: 0, cost: -50, type: "rest" }
             }
         },
         demon: {
@@ -241,6 +244,8 @@
         playerStates.isBlocking = false;
         playerStates.isCountering = false;
         playerStates.isResting = false;
+        playerStates.concentrationTurns = 0;
+        aiStates.concentrationTurns = 0;
         
         document.getElementById('enemy-name').textContent = `${factionData[selectedFaction].enemyPrefix}${winStreak + 1}`;
         document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
@@ -252,7 +257,28 @@
         
         document.getElementById('combat-log').textContent = `An upgraded foe approaches! Begin round ${winStreak + 1}.`;
         
+        updateUIEffects();
         updateActionButtons();
+    }
+
+    function updateUIEffects() {
+        // Player concentration element management
+        const pStatus = document.getElementById('player-status-display');
+        if (playerStates.concentrationTurns > 0) {
+            pStatus.textContent = `🧘 Stance: Concentrated (${playerStates.concentrationTurns} Turns Left)`;
+            pStatus.style.display = 'block';
+        } else {
+            pStatus.style.display = 'none';
+        }
+
+        // Enemy concentration element management
+        const eStatus = document.getElementById('enemy-status-display');
+        if (aiStates.concentrationTurns > 0) {
+            eStatus.textContent = `🧘 Stance: Concentrated (${aiStates.concentrationTurns} Turns Left)`;
+            eStatus.style.display = 'block';
+        } else {
+            eStatus.style.display = 'none';
+        }
     }
 
     function updateActionButtons() {
@@ -260,7 +286,6 @@
 
         let isDesperate = pHP < 50 && dHP > 50;
 
-        // Render Stamina interface values
         document.getElementById('stamina-text').textContent = `${pStamina} / ${maxStamina}`;
         document.getElementById('stamina-bar-fill').style.width = `${(pStamina / maxStamina) * 100}%`;
 
@@ -287,7 +312,6 @@
                 btn.classList.remove('desperation-glow');
             }
             
-            // Check if user has sufficient stamina layout reserves
             let hasStamina = (m.cost <= pStamina) || (key === 'm5');
             
             if (!hasStamina || isTurnProcessing || pHP <= 0 || dHP <= 0) {
@@ -305,31 +329,39 @@
         if (move.type !== 'rest' && move.cost > pStamina) return;
 
         isTurnProcessing = true;
+        let logMsg = "";
         
         if (move.type === 'rest') {
             playerStates.isResting = true;
-            // Recover stamina up to max engine cap
             pStamina = Math.min(maxStamina, pStamina + Math.abs(move.cost));
-            document.getElementById('combat-log').textContent = `🧘 You drop your stance to recover focus! Regenerated +50 Stamina, but you are wide open to incoming strikes!`;
+            
+            if (selectedFaction === 'slayer') {
+                playerStates.concentrationTurns = 3; // Triggers healing and enhanced block properties
+                logMsg = `🧘 Total Concentration Breathing! You unlock your core energy. Regenerated +50 Stamina and gained a 2-turn slow health regen engine! Your block is now hyper-efficient!`;
+            } else {
+                logMsg = `🧘 You drop your stance into Deep Hibernation! Regenerated +50 Stamina, but you are wide open to incoming strikes!`;
+            }
         } else {
             pStamina -= move.cost;
             if (move.type === 'block') {
                 playerStates.isBlocking = true;
-                document.getElementById('combat-log').textContent = `🛡️ You raised your defenses! Mitigation active for this exchange.`;
+                if (selectedFaction === 'slayer' && playerStates.concentrationTurns > 0) {
+                    logMsg = `🛡️ Enhanced Block! Your Total Concentration patterns allow you to block 90% of incoming kinetic pressure!`;
+                } else {
+                    logMsg = `🛡️ You raised your defenses! Mitigation active for this exchange.`;
+                }
             } else if (move.type === 'counter') {
                 playerStates.isCountering = true;
                 if (pHP < 50 && dHP > 50) {
-                    document.getElementById('combat-log').textContent = `⚡ Desperation Counter! Your low health lures the overconfident bot. The bait chance is near guaranteed!`;
+                    logMsg = `⚡ Desperation Counter! Your low health lures the overconfident bot. The bait chance is near guaranteed!`;
                 } else {
-                    document.getElementById('combat-log').textContent = `⚡ Stance Set! Bracing for the incoming strike...`;
+                    logMsg = `⚡ Stance Set! Bracing for the incoming strike...`;
                 }
             } else if (move.type === 'heal') {
                 pHP = Math.min(maxPHP, pHP + move.power);
-                document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
-                document.getElementById('combat-log').textContent = `🩸 Recovery Action! Patched up, recovering ${move.power} HP.`;
+                logMsg = `🩸 Recovery Action! Patched up, recovering ${move.power} HP.`;
             } else {
                 let actualPower = move.power;
-                let logMsg = "";
                 
                 if (selectedFaction === 'slayer' && move.name === "Sword Thrust" && pHP < 35) {
                     actualPower = Math.floor(move.power * 1.5);
@@ -339,19 +371,28 @@
                 }
 
                 dHP = Math.max(0, dHP - actualPower);
-                document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
                 
                 if (selectedFaction === 'demon' && move.name === "Flesh Bite") {
                     let leech = Math.floor(actualPower * 0.30);
                     pHP = Math.min(maxPHP, pHP + leech);
                     logMsg = `💥 Strike Hit! You bit deep into the foe using ${move.name} for ${actualPower} damage and leeched 🩸 ${leech} HP!`;
                 }
-
-                document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
-                document.getElementById('combat-log').textContent = logMsg;
             }
         }
 
+        // Apply dynamic end-of-turn processing status updates for the user loop
+        if (playerStates.concentrationTurns > 0) {
+            playerStates.concentrationTurns--;
+            let regenAmt = 8;
+            pHP = Math.min(maxPHP, pHP + regenAmt);
+            logMsg += ` (Concentration Heal: +${regenAmt} HP)`;
+        }
+
+        document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
+        document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
+        document.getElementById('combat-log').textContent = logMsg;
+
+        updateUIEffects();
         updateActionButtons();
 
         if (dHP <= 0) {
@@ -381,9 +422,7 @@
             let dodgeChanceBase = 0.35; 
             let finalDodgeChance = Math.max(0.0, dodgeChanceBase - botGreedFactor); 
 
-            // AI STAMINA MANAGEMENT CHECK
             if (dStamina < 20) {
-                // Opponent is low on reserves and MUST rest to regenerate stamina
                 aiMoveName = selectedFaction === 'slayer' ? "Deep Hibernation Rest" : "Total Concentration Breath";
                 aiCost = -50; 
                 rawAiDamage = 0;
@@ -405,26 +444,34 @@
                 rawAiDamage = 0; 
                 aiCost = 15;
             } 
-            else if (pHP < 35 && !playerStates.isResting && dStamina >= 40) {
-                aiMoveName = selectedFaction === 'slayer' ? "Blood Art: Crimson Rent" : "Water Breathing: Constant Flux";
-                rawAiDamage = 26; 
-                aiCost = 40;
-            } 
             else {
-                if (selectedFaction === 'slayer') {
-                    aiMoveName = Math.random() > 0.4 ? "Violent Bite" : "Claw Rip";
-                    rawAiDamage = aiMoveName === "Violent Bite" ? 15 : 10;
-                    aiCost = aiMoveName === "Violent Bite" ? 20 : 15;
+                // If AI is a Slayer and is currently Concentrated, it is significantly smarter and tries to prioritize efficient blocks or calculated strikes
+                if (selectedFaction === 'demon' && aiStates.concentrationTurns > 0 && Math.random() > 0.5) {
+                    aiMoveName = "Sword Block";
+                    rawAiDamage = 0;
+                    aiCost = 20;
+                } else if (pHP < 35 && !playerStates.isResting && dStamina >= 40) {
+                    aiMoveName = selectedFaction === 'slayer' ? "Blood Art: Crimson Rent" : "Water Breathing: Constant Flux";
+                    rawAiDamage = 26; 
+                    aiCost = 40;
                 } else {
-                    aiMoveName = Math.random() > 0.4 ? "Water Thrust Strike" : "Form 1: Horizontal Slash";
-                    rawAiDamage = aiMoveName === "Water Thrust Strike" ? 16 : 11;
-                    aiCost = aiMoveName === "Water Thrust Strike" ? 20 : 15;
+                    if (selectedFaction === 'slayer') {
+                        aiMoveName = Math.random() > 0.4 ? "Violent Bite" : "Claw Rip";
+                        rawAiDamage = aiMoveName === "Violent Bite" ? 15 : 10;
+                        aiCost = aiMoveName === "Violent Bite" ? 20 : 15;
+                    } else {
+                        aiMoveName = Math.random() > 0.4 ? "Water Thrust Strike" : "Form 1: Horizontal Slash";
+                        rawAiDamage = aiMoveName === "Water Thrust Strike" ? 16 : 11;
+                        aiCost = aiMoveName === "Water Thrust Strike" ? 20 : 15;
+                    }
                 }
             }
 
-            // Adjust opponent stamina pool dynamics
             if (aiIsResting) {
                 dStamina = Math.min(maxDStamina, dStamina + Math.abs(aiCost));
+                if (selectedFaction === 'demon') {
+                    aiStates.concentrationTurns = 3; // Enemy Slayer uses deep concentration logic
+                }
             } else {
                 dStamina -= aiCost;
             }
@@ -436,7 +483,13 @@
             let logMessage = "";
 
             if (aiIsResting) {
-                logMessage = `💨 Breathing Phase! The opponent was dangerously low on energy and dropped back to perform ${aiMoveName}, regaining +50 Stamina! They are wide open!`;
+                if (selectedFaction === 'demon') {
+                    logMessage = `💨 Breathing Phase! The opponent activated ${aiMoveName}, regaining +50 Stamina, a gradual health recovery engine, and an amplified block mode!`;
+                } else {
+                    logMessage = `💨 Rest Phase! The opponent dropped back to perform ${aiMoveName}, regaining +50 Stamina! They are wide open!`;
+                }
+            } else if (rawAiDamage === 0 && aiMoveName === "Sword Block") {
+                logMessage = `🛡️ The opponent chose to assume a defensive stance with ${aiMoveName}.`;
             } else if (rawAiDamage === 0) {
                 logMessage = `🧠 Smart AI! The opponent tracked your stance layout, backed off safely, and used ${aiMoveName}.`;
             } else if (playerStates.isCountering) {
@@ -446,14 +499,23 @@
 
                 dHP = Math.max(0, dHP - counterDmg);
                 logMessage = `⚡ PUNISHED! The bot's greed blinded them! They swung into your counter using ${aiMoveName}. You reflected everything and slashed back for ${counterDmg} damage!`;
-                document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
             } else if (playerStates.isBlocking) {
-                finalDamage = Math.floor(rawAiDamage * 0.3); 
-                logMessage = `🛡️ Blocked! Opponent executed ${aiMoveName}. Your stance reduced scaling damage to ${finalDamage}.`;
+                // Apply concentration modifier checks to the damage calculation engine
+                let reductionFactor = (selectedFaction === 'slayer' && playerStates.concentrationTurns > 0) ? 0.1 : 0.3;
+                finalDamage = Math.floor(rawAiDamage * reductionFactor); 
+                logMessage = `🛡️ Blocked! Opponent executed ${aiMoveName}. Your enhanced stance reduced scaling damage to ${finalDamage}.`;
             } else if (playerStates.isResting) {
                 logMessage = `🚨 Caught Resting! The bot capitalized on your down frame and slammed you with ${aiMoveName} for ${finalDamage} damage!`;
             } else {
                 logMessage = `🚨 Ouch! The bot smashed through your line using ${aiMoveName} for ${finalDamage} damage.`;
+            }
+
+            // Apply dynamic end-of-turn processing status updates for the AI engine loop
+            if (aiStates.concentrationTurns > 0) {
+                aiStates.concentrationTurns--;
+                let aiRegen = 8;
+                dHP = Math.min(maxDHP, dHP + aiRegen);
+                logMessage += ` (Opponent Concentration Heal: +${aiRegen} HP)`;
             }
 
             playerStates.isBlocking = false;
@@ -461,10 +523,13 @@
             playerStates.isResting = false; 
 
             pHP = Math.max(0, pHP - finalDamage);
+            
             document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
+            document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
             document.getElementById('enemy-stamina-display').textContent = `Opponent Stamina: ${dStamina} / ${maxDStamina}`;
             document.getElementById('combat-log').textContent = logMessage;
             
+            updateUIEffects();
             isTurnProcessing = false;
             
             if (dHP <= 0) {
