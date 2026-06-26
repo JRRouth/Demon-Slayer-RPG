@@ -91,10 +91,10 @@
         </div>
         
         <div class="move-grid">
-            <button id="btn-slash" onclick="playerTurn('slash')">Sword Slash (20/20)</button>
-            <button id="btn-thrust" onclick="playerTurn('thrust')">Sword Thrust (5/5)</button>
-            <button id="btn-block" onclick="playerTurn('block')">Sword Block (10/10)</button>
-            <button id="btn-counter" onclick="playerTurn('counter')">Sword Counter (8/8)</button>
+            <button id="btn-slash" onclick="playerTurn('slash')">Sword Slash</button>
+            <button id="btn-thrust" onclick="playerTurn('thrust')">Sword Thrust</button>
+            <button id="btn-block" onclick="playerTurn('block')">Sword Block</button>
+            <button id="btn-counter" onclick="playerTurn('counter')">Sword Counter</button>
         </div>
 
         <div class="status-box" id="combat-log">The dynamic combat parameters are initialized. Select a move to strike.</div>
@@ -113,3 +113,70 @@
         block: { name: "Sword Block", power: 0, maxBp: 10, bp: 10, elementId: "btn-block" },
         counter: { name: "Sword Counter", power: 20, maxBp: 8, bp: 8, elementId: "btn-counter" }
     };
+
+    function updateActionButtons() {
+        for (let key in moves) {
+            const m = moves[key];
+            const btn = document.getElementById(m.elementId);
+            btn.textContent = `${m.name} (${m.bp}/${m.maxBp})`;
+            
+            if (m.bp <= 0 || isTurnProcessing || pHP <= 0 || dHP <= 0) {
+                btn.disabled = true;
+            } else {
+                btn.disabled = false;
+            }
+        }
+    }
+
+    function playerTurn(moveKey) {
+        if (isTurnProcessing || pHP <= 0 || dHP <= 0) return;
+        
+        const move = moves[moveKey];
+        if (move.bp <= 0) return;
+
+        isTurnProcessing = true;
+        move.bp--;
+        
+        let damage = move.power;
+        dHP = Math.max(0, dHP - damage);
+        
+        document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
+        document.getElementById('combat-log').textContent = `⚔️ You executed ${move.name}! Dealt ${damage} damage to the Demon.`;
+        updateActionButtons();
+        
+        if (dHP <= 0) {
+            setTimeout(() => {
+                document.getElementById('combat-log').textContent = "🥇 VICTORY! The demon was decapitated. Training loop complete.";
+                isTurnProcessing = false;
+                updateActionButtons();
+            }, 600);
+            return;
+        }
+
+        setTimeout(() => {
+            if (pHP <= 0 || dHP <= 0) return;
+
+            let botMove = Math.random() > 0.5 ? "Scratch" : "Bite";
+            let botDamage = botMove === "Bite" ? 14 : 9;
+            
+            pHP = Math.max(0, pHP - botDamage);
+            
+            document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
+            document.getElementById('combat-log').textContent = `🩸 The Demon countered with ${botMove}! You sustained ${botDamage} damage.`;
+            
+            isTurnProcessing = false;
+            
+            if (pHP <= 0) {
+                document.getElementById('combat-log').textContent = "💀 DEFEAT! Your breath training failed. Run endpoint reached.";
+            }
+            
+            updateActionButtons();
+        }, 1000);
+    }
+
+    // Run this right away to draw the BP numbers on load
+    updateActionButtons();
+</script>
+
+</body>
+</html>
