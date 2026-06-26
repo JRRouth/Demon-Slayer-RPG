@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demon Slayer RPG - Tactical BP Management</title>
+    <title>Demon Slayer RPG - Stamina Combat System</title>
     <style>
         body { 
             background-color: #0b0f19; 
@@ -58,8 +58,21 @@
         }
         .enemy-title { margin: 0 0 5px 0; font-size: 1.5rem; letter-spacing: 0.5px; }
         .hp-bar { color: #ef4444; font-weight: bold; font-size: 1.1rem; }
-        .player-hp-bar { color: #10b981; font-weight: bold; font-size: 1.1rem; margin-top: 15px;}
         
+        .resource-container {
+            margin-top: 15px;
+            background: #0f172a;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #1e293b;
+        }
+        .player-hp-bar { color: #10b981; font-weight: bold; font-size: 1.1rem; text-align: left; margin-bottom: 8px;}
+        
+        /* Stamina Bar UI Layout Component */
+        .stamina-header { display: flex; justify-content: space-between; color: #eab308; font-weight: bold; font-size: 0.95rem; margin-bottom: 4px; }
+        .stamina-track { width: 100%; height: 10px; background: #1e293b; border-radius: 99px; overflow: hidden; }
+        .stamina-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #eab308, #f59e0b); transition: width 0.3s ease; }
+
         .streak-counter {
             text-align: center;
             font-size: 0.9rem;
@@ -69,7 +82,6 @@
             letter-spacing: 0.5px;
         }
 
-        /* 5-Button Grid Setup Layout */
         .move-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         .btn-full-width { grid-column: span 2; }
         
@@ -154,13 +166,26 @@
         </div>
 
         <div class="status-box" id="combat-log">Ready for combat operations. Make your opening strike.</div>
-        <div id="player-hp" class="player-hp-bar">Your HP: 100 / 100</div>
+        
+        <div class="resource-container">
+            <div id="player-hp" class="player-hp-bar">Your HP: 100 / 100</div>
+            <div class="stamina-section">
+                <div class="stamina-header">
+                    <span>STAMINA</span>
+                    <span id="stamina-text">100 / 100</span>
+                </div>
+                <div class="stamina-track">
+                    <div id="stamina-bar-fill" class="stamina-fill"></div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
     let pHP = 100, maxPHP = 100;
     let dHP = 100, maxDHP = 100;
+    let pStamina = 100, maxStamina = 100;
     let isTurnProcessing = false;
     let selectedFaction = "";
     let winStreak = 0;
@@ -173,22 +198,22 @@
             enemyPrefix: "👹 Demon Tier ",
             arenaColor: "#3b82f6", 
             moves: {
-                m1: { name: "Sword Slash", power: 15, maxBp: 20, bp: 20, type: "attack" },
-                m2: { name: "Sword Thrust", power: 25, maxBp: 5, bp: 5, type: "attack" },
-                m3: { name: "Sword Block", power: 0, maxBp: 10, bp: 10, type: "block" },
-                m4: { name: "Sword Counter", power: 0, maxBp: 8, bp: 8, type: "counter" },
-                m5: { name: "Total Concentration Breath", power: 0, maxBp: 99, bp: 99, type: "rest" }
+                m1: { name: "Sword Slash", power: 15, cost: 15, type: "attack" },
+                m2: { name: "Sword Thrust", power: 26, cost: 40, type: "attack" },
+                m3: { name: "Sword Block", power: 0, cost: 20, type: "block" },
+                m4: { name: "Sword Counter", power: 0, cost: 25, type: "counter" },
+                m5: { name: "Total Concentration Breath", power: 0, cost: -50, type: "rest" } // Negative cost adds stamina
             }
         },
         demon: {
             enemyPrefix: "⚔️ Slayer Rank ",
             arenaColor: "#ef4444", 
             moves: {
-                m1: { name: "Demon Scratch", power: 14, maxBp: 20, bp: 20, type: "attack" },
-                m2: { name: "Flesh Bite", power: 22, maxBp: 6, bp: 6, type: "attack" },
-                m3: { name: "Blood Regenerate", power: 20, maxBp: 8, bp: 8, type: "heal" },
-                m4: { name: "Blood Art Counter", power: 0, maxBp: 7, bp: 7, type: "counter" },
-                m5: { name: "Deep Hibernation Rest", power: 0, maxBp: 99, bp: 99, type: "rest" }
+                m1: { name: "Demon Scratch", power: 14, cost: 15, type: "attack" },
+                m2: { name: "Flesh Bite", power: 24, cost: 35, type: "attack" },
+                m3: { name: "Blood Regenerate", power: 20, cost: 25, type: "heal" },
+                m4: { name: "Blood Art Counter", power: 0, cost: 25, type: "counter" },
+                m5: { name: "Deep Hibernation Rest", power: 0, cost: -50, type: "rest" }
             }
         }
     };
@@ -196,6 +221,7 @@
     function selectFaction(faction) {
         selectedFaction = faction;
         moves = factionData[faction].moves;
+        pStamina = 100; // Fresh start
 
         document.getElementById('arena-border').style.borderColor = factionData[faction].arenaColor;
         document.getElementById('faction-screen').style.display = 'none';
@@ -207,10 +233,6 @@
     function setupMatch() {
         dHP = 100;
         isTurnProcessing = false;
-        
-        for (let key in moves) {
-            moves[key].bp = moves[key].maxBp;
-        }
 
         playerStates.isBlocking = false;
         playerStates.isCountering = false;
@@ -233,6 +255,10 @@
 
         let isDesperate = pHP < 50 && dHP > 50;
 
+        // Render Stamina interface values
+        document.getElementById('stamina-text').textContent = `${pStamina} / ${maxStamina}`;
+        document.getElementById('stamina-bar-fill').style.width = `${(pStamina / maxStamina) * 100}%`;
+
         for (let key in moves) {
             const m = moves[key];
             let btnId = 'btn-1';
@@ -245,9 +271,9 @@
             if (!btn) continue;
             
             if (key === 'm5') {
-                btn.textContent = `🧘 ${m.name}`;
+                btn.textContent = `🧘 ${m.name} (+50 STAM)`;
             } else {
-                btn.textContent = `${m.name} (${m.bp}/${m.maxBp})`;
+                btn.textContent = `${m.name} [${m.cost} STAM]`;
             }
             
             if (key === 'm4' && isDesperate) {
@@ -256,7 +282,10 @@
                 btn.classList.remove('desperation-glow');
             }
             
-            if (m.bp <= 0 || isTurnProcessing || pHP <= 0 || dHP <= 0) {
+            // Check if user has sufficient stamina layout reserves
+            let hasStamina = (m.cost <= pStamina) || (key === 'm5');
+            
+            if (!hasStamina || isTurnProcessing || pHP <= 0 || dHP <= 0) {
                 btn.disabled = true;
             } else {
                 btn.disabled = false;
@@ -268,22 +297,17 @@
         if (!moves || isTurnProcessing || pHP <= 0 || dHP <= 0) return;
         
         const move = moves[moveKey];
-        if (move.bp <= 0) return;
+        if (move.type !== 'rest' && move.cost > pStamina) return;
 
         isTurnProcessing = true;
         
         if (move.type === 'rest') {
             playerStates.isResting = true;
-            
-            // Core Replenish Engine Loop (+5 BP to all skills up to max caps)
-            for (let key in moves) {
-                if (key !== 'm5') {
-                    moves[key].bp = Math.min(moves[key].maxBp, moves[key].bp + 5);
-                }
-            }
-            document.getElementById('combat-log').textContent = `🧘 You drop your stance to recover focus! All abilities recovered +5 BP. You are exposed to incoming strikes!`;
+            // Recover stamina up to max engine cap
+            pStamina = Math.min(maxStamina, pStamina + Math.abs(move.cost));
+            document.getElementById('combat-log').textContent = `🧘 You drop your stance to recover focus! Regenerated +50 Stamina, but you are wide open to incoming strikes!`;
         } else {
-            move.bp--;
+            pStamina -= move.cost;
             if (move.type === 'block') {
                 playerStates.isBlocking = true;
                 document.getElementById('combat-log').textContent = `🛡️ You raised your defenses! Mitigation active for this exchange.`;
@@ -335,7 +359,6 @@
             return;
         }
 
-        // --- ADAPTIVE DYNAMIC COUNTER AI TURN ---
         setTimeout(() => {
             if (pHP <= 0 || dHP <= 0) {
                 isTurnProcessing = false;
@@ -345,13 +368,8 @@
             let aiMoveName = "";
             let rawAiDamage = 0;
             
-            // Math integration setup for bot greed calculation
             let botGreedFactor = (dHP - pHP) / 100; 
-            
-            // If player is resting, the bot gets highly aggressive and will 100% attack!
-            if (playerStates.isResting) {
-                botGreedFactor = 1.0; 
-            }
+            if (playerStates.isResting) { botGreedFactor = 1.0; }
 
             let dodgeChanceBase = 0.35; 
             let finalDodgeChance = Math.max(0.0, dodgeChanceBase - botGreedFactor); 
@@ -403,7 +421,6 @@
                 finalDamage = Math.floor(rawAiDamage * 0.3); 
                 logMessage = `🛡️ Blocked! Opponent executed ${aiMoveName}. Your stance reduced scaling damage to ${finalDamage}.`;
             } else if (playerStates.isResting) {
-                // Takes unmitigated damage during rest, but sets up massive tracking greed on the bot
                 logMessage = `🚨 Caught Resting! The bot capitalized on your down frame and slammed you with ${aiMoveName} for ${finalDamage} damage!`;
             } else {
                 logMessage = `🚨 Ouch! The bot smashed through your line using ${aiMoveName} for ${finalDamage} damage.`;
@@ -411,7 +428,7 @@
 
             playerStates.isBlocking = false;
             playerStates.isCountering = false;
-            playerStates.isResting = false; // Reset vulnerable rest state
+            playerStates.isResting = false; 
 
             pHP = Math.max(0, pHP - finalDamage);
             document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
