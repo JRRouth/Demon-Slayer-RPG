@@ -17,15 +17,36 @@
             margin: 0; 
             padding: 20px; 
         }
-        .game-container { display: flex; gap: 25px; max-width: 600px; width: 100%; }
+        .game-container { max-width: 600px; width: 100%; }
+        
         .panel { 
             background: linear-gradient(145deg, #131c2e, #1b2640); 
             border: 1px solid #243557; 
             border-radius: 16px; 
             padding: 24px; 
-            flex: 1; 
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
         }
+
+        /* Faction Screen Styling */
+        #faction-screen { text-align: center; }
+        .faction-title { margin-bottom: 30px; letter-spacing: 1px; }
+        .faction-options { display: flex; gap: 20px; }
+        .btn-faction {
+            flex: 1;
+            padding: 40px 20px;
+            font-size: 1.25rem;
+            background: #1e293b;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .btn-slayer { border: 2px solid #10b981; color: #10b981; }
+        .btn-slayer:hover { background: #10b981; color: #0b0f19; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); transform: scale(1.03); }
+        .btn-demon { border: 2px solid #ef4444; color: #ef4444; }
+        .btn-demon:hover { background: #ef4444; color: #0b0f19; box-shadow: 0 0 15px rgba(239, 68, 68, 0.4); transform: scale(1.03); }
+
+        /* Battle Screen (Hidden by default) */
+        #battle-screen { display: none; }
         
         .battle-arena { 
             text-align: center; 
@@ -42,7 +63,7 @@
 
         .move-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
         
-        button { 
+        button.move-btn { 
             background: #1e293b; 
             color: #cbd5e1; 
             border: 1px solid #334155; 
@@ -53,13 +74,13 @@
             font-family: inherit;
             transition: all 0.2s ease;
         }
-        button:hover:not(:disabled) { 
+        button.move-btn:hover:not(:disabled) { 
             background: #1d4ed8; 
             border-color: #3b82f6; 
             color: white;
             transform: scale(1.02);
         }
-        button:disabled {
+        button.move-btn:disabled {
             background: #0f172a;
             border-color: #1e293b;
             color: #475569;
@@ -84,20 +105,28 @@
 <body>
 
 <div class="game-container">
-    <div class="panel">
-        <div class="battle-arena">
-            <h2 id="enemy-name" class="enemy-title">👹 Basic Demon</h2>
+    <div class="panel" id="faction-screen">
+        <h2 class="faction-title">CHOOSE YOUR PATH</h2>
+        <div class="faction-options">
+            <button class="btn-faction btn-slayer" onclick="selectFaction('slayer')">⚔️ Demon Slayer</button>
+            <button class="btn-faction btn-demon" onclick="selectFaction('demon')">👹 Rogue Demon</button>
+        </div>
+    </div>
+
+    <div class="panel" id="battle-screen">
+        <div class="battle-arena" id="arena-border">
+            <h2 id="enemy-name" class="enemy-title">Opponent</h2>
             <div id="enemy-hp" class="hp-bar">HP: 100 / 100</div>
         </div>
         
         <div class="move-grid">
-            <button id="btn-slash" onclick="playerTurn('slash')">Sword Slash</button>
-            <button id="btn-thrust" onclick="playerTurn('thrust')">Sword Thrust</button>
-            <button id="btn-block" onclick="playerTurn('block')">Sword Block</button>
-            <button id="btn-counter" onclick="playerTurn('counter')">Sword Counter</button>
+            <button id="btn-1" class="move-btn" onclick="playerTurn('m1')">Move 1</button>
+            <button id="btn-2" class="move-btn" onclick="playerTurn('m2')">Move 2</button>
+            <button id="btn-3" class="move-btn" onclick="playerTurn('m3')">Move 3</button>
+            <button id="btn-4" class="move-btn" onclick="playerTurn('m4')">Move 4</button>
         </div>
 
-        <div class="status-box" id="combat-log">The dynamic combat parameters are initialized. Select a move to strike.</div>
+        <div class="status-box" id="combat-log">Ready for combat operations. Make your opening strike.</div>
         <div id="player-hp" class="player-hp-bar">Your HP: 100 / 100</div>
     </div>
 </div>
@@ -106,24 +135,58 @@
     let pHP = 100, maxPHP = 100;
     let dHP = 100, maxDHP = 100;
     let isTurnProcessing = false;
+    let selectedFaction = "";
 
-    // Tactical state flags
-    let playerStates = {
-        isBlocking: false,
-        isCountering: false
+    let playerStates = { isBlocking: false, isCountering: false };
+    let moves = {};
+
+    // Move pools dependent on your selection
+    const factionData = {
+        slayer: {
+            enemyName: "👹 Basic Demon",
+            arenaColor: "#3b82f6", // Blue aura
+            moves: {
+                m1: { name: "Sword Slash", power: 15, maxBp: 20, bp: 20, type: "attack" },
+                m2: { name: "Sword Thrust", power: 25, maxBp: 5, bp: 5, type: "attack" },
+                m3: { name: "Sword Block", power: 0, maxBp: 10, bp: 10, type: "block" },
+                m4: { name: "Sword Counter", power: 0, maxBp: 8, bp: 8, type: "counter" }
+            }
+        },
+        demon: {
+            enemyName: "⚔️ Corps Trainee",
+            arenaColor: "#ef4444", // Red blood aura
+            moves: {
+                m1: { name: "Demon Scratch", power: 14, maxBp: 20, bp: 20, type: "attack" },
+                m2: { name: "Flesh Bite", power: 22, maxBp: 6, bp: 6, type: "attack" },
+                m3: { name: "Blood Regenerate", power: 20, maxBp: 8, bp: 8, type: "heal" },
+                m4: { name: "Blood Art Counter", power: 0, maxBp: 7, bp: 7, type: "counter" }
+            }
+        }
     };
-    
-    const moves = {
-        slash: { name: "Sword Slash", power: 15, maxBp: 20, bp: 20, elementId: "btn-slash" },
-        thrust: { name: "Sword Thrust", power: 25, maxBp: 5, bp: 5, elementId: "btn-thrust" },
-        block: { name: "Sword Block", power: 0, maxBp: 10, bp: 10, elementId: "btn-block" },
-        counter: { name: "Sword Counter", power: 0, maxBp: 8, bp: 8, elementId: "btn-counter" } // Power is handled conditionally
-    };
+
+    function selectFaction(faction) {
+        selectedFaction = faction;
+        const data = factionData[faction];
+        moves = data.moves;
+
+        // Apply theme color and names based on faction
+        document.getElementById('enemy-name').textContent = data.enemyName;
+        document.getElementById('arena-border').style.borderColor = data.arenaColor;
+
+        // Transition Screen States
+        document.getElementById('faction-screen').style.display = 'none';
+        document.getElementById('battle-screen').style.display = 'block';
+
+        // Redraw labels
+        document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
+        document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
+        updateActionButtons();
+    }
 
     function updateActionButtons() {
         for (let key in moves) {
             const m = moves[key];
-            const btn = document.getElementById(m.elementId);
+            const btn = document.getElementById(key === 'm1' ? 'btn-1' : key === 'm2' ? 'btn-2' : key === 'm3' ? 'btn-3' : 'btn-4');
             if (!btn) continue;
             
             btn.textContent = `${m.name} (${m.bp}/${m.maxBp})`;
@@ -145,61 +208,60 @@
         isTurnProcessing = true;
         move.bp--;
         
-        // Handle unique tactical statuses
-        if (moveKey === 'block') {
+        // Handle Action Types
+        if (move.type === 'block') {
             playerStates.isBlocking = true;
-            document.getElementById('combat-log').textContent = `🛡️ You raised your blade in a defensive stance! Defenses up for this turn.`;
-        } else if (moveKey === 'counter') {
+            document.getElementById('combat-log').textContent = `🛡️ You raised your blade defensively! Incoming strike mitigation primed.`;
+        } else if (move.type === 'counter') {
             playerStates.isCountering = true;
-            document.getElementById('combat-log').textContent = `⚡ You focused your breathing, waiting to punish the Demon's next incoming strike!`;
+            document.getElementById('combat-log').textContent = `⚡ Stance Set! You brace to absorb and fiercely channel back the opponent's momentum.`;
+        } else if (move.type === 'heal') {
+            pHP = Math.min(maxPHP, pHP + move.power);
+            document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
+            document.getElementById('combat-log').textContent = `🩸 Blood Art! Your wounds sew shut, restoring ${move.power} HP.`;
         } else {
-            // Standard Attack Execution
-            let damage = move.power;
-            dHP = Math.max(0, dHP - damage);
+            // Standard Attack
+            dHP = Math.max(0, dHP - move.power);
             document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
-            document.getElementById('combat-log').textContent = `⚔️ You executed ${move.name}! Dealt ${damage} damage to the Demon.`;
+            document.getElementById('combat-log').textContent = `💥 Burst Action! You executed ${move.name} and dealt ${move.power} damage.`;
         }
 
         updateActionButtons();
-        
         if (dHP <= 0) {
             setTimeout(() => {
-                document.getElementById('combat-log').textContent = "🥇 VICTORY! The demon was decapitated. Training loop complete.";
+                document.getElementById('combat-log').textContent = "🥇 COMBAT TERMINATED: Objective achieved. Target neutralized.";
                 isTurnProcessing = false;
                 updateActionButtons();
             }, 600);
             return;
         }
 
-        // Trigger Enemy Action Thread
+        // Trigger AI Opponent Thread
         setTimeout(() => {
             if (pHP <= 0 || dHP <= 0) {
                 isTurnProcessing = false;
                 return;
             }
 
-            let botMove = Math.random() > 0.5 ? "Scratch" : "Bite";
-            let rawBotDamage = botMove === "Bite" ? 15 : 10;
-            let finalDamage = rawBotDamage;
-            
+            // AI action choice profile
+            let aiMoveName = selectedFaction === 'slayer' ? (Math.random() > 0.5 ? "Scratch" : "Bite") : (Math.random() > 0.5 ? "Slash Strike" : "Thrust Strike");
+            let rawAiDamage = aiMoveName === "Bite" || aiMoveName === "Thrust Strike" ? 16 : 10;
+            let finalDamage = rawAiDamage;
             let logMessage = "";
 
-            // Check defensive calculations
             if (playerStates.isCountering) {
                 finalDamage = 0;
-                let counterDamage = 20;
-                dHP = Math.max(0, dHP - counterDamage);
-                
-                logMessage = `⚡ Perfect Parry! The Demon lunged with ${botMove} but you deflected it entirely and delivered a devastating counter-strike for ${counterDamage} damage!`;
+                let counterDmg = 20;
+                dHP = Math.max(0, dHP - counterDmg);
+                logMessage = `⚡ Perfect Counter Calculation! The opponent launched ${aiMoveName}, but you turned the impact completely into a ${counterDmg} damage counter-strike!`;
                 document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
             } else if (playerStates.isBlocking) {
-                finalDamage = Math.floor(rawBotDamage * 0.3); // 70% damage mitigation
-                logMessage = `🛡️ Absorbed! The Demon lunged with ${botMove}. Thanks to your stance, damage was reduced from ${rawBotDamage} down to ${finalDamage}!`;
+                finalDamage = Math.floor(rawAiDamage * 0.3); // 70% reduction
+                logMessage = `🛡️ Stance Absorbed! Opponent utilized ${aiMoveName}. Heavy dampening dropped incoming damage down to ${finalDamage}.`;
             } else {
-                logMessage = `🩸 Direct Hit! The Demon attacked with ${botMove}! You sustained ${finalDamage} damage.`;
+                logMessage = `🚨 Impact Taken! The enemy broke through your baseline defense using ${aiMoveName} for ${finalDamage} damage.`;
             }
 
-            // Reset flags for the next round
             playerStates.isBlocking = false;
             playerStates.isCountering = false;
 
@@ -209,22 +271,14 @@
             
             isTurnProcessing = false;
             
-            // Check win/loss endpoints
             if (dHP <= 0) {
-                document.getElementById('combat-log').textContent += " 🥇 The counter shattered their stance! VICTORY!";
+                document.getElementById('combat-log').textContent += " 🥇 The counter force crushed their remaining vital reserves!";
             } else if (pHP <= 0) {
-                document.getElementById('combat-log').textContent = "💀 DEFEAT! Your breath training failed. Run endpoint reached.";
+                document.getElementById('combat-log').textContent = "💀 LIFESIGN TERMINATED: Match criteria lost. Run state completed.";
             }
-            
             updateActionButtons();
         }, 1200);
     }
-
-    window.onload = function() {
-        document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
-        document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
-        updateActionButtons();
-    };
 </script>
 
 </body>
