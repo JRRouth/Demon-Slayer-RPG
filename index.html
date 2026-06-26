@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Demon Slayer RPG - Fully Fixed Dual Paths</title>
+    <title>Demon Slayer RPG - Balanced Battle Loop</title>
     <style>
         body { 
             background-color: #0b0f19; 
@@ -189,7 +189,6 @@
         dHP = 100;
         isTurnProcessing = false;
         
-        // Refresh player BP for next round loop
         for (let key in moves) {
             moves[key].bp = moves[key].maxBp;
         }
@@ -201,7 +200,8 @@
         document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
         document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
         
-        document.getElementById('streak-display').textContent = `WIN STREAK: ${winStreak} | BOT DAMAGE: +${winStreak * 20}%`;
+        // Balanced Output Tracker (+10% instead of +20%)
+        document.getElementById('streak-display').textContent = `WIN STREAK: ${winStreak} | BOT DAMAGE: +${winStreak * 10}%`;
         document.getElementById('streak-display').style.color = selectedFaction === 'slayer' ? '#3b82f6' : '#ef4444';
         
         document.getElementById('combat-log').textContent = `An upgraded foe approaches! Begin round ${winStreak + 1}.`;
@@ -248,9 +248,30 @@
             document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
             document.getElementById('combat-log').textContent = `🩸 Blood Art! Wounds sew shut, recovering ${move.power} HP.`;
         } else {
-            dHP = Math.max(0, dHP - move.power);
+            // Damage Logic Execution Area
+            let actualPower = move.power;
+            let logMsg = "";
+            
+            // Slayer Mechanic Balance Boost: Critical execution break
+            if (selectedFaction === 'slayer' && move.name === "Sword Thrust" && pHP < 35) {
+                actualPower = Math.floor(move.power * 1.5);
+                logMsg = `🎯 CRITICAL BREAK! Using ${move.name} while critical unleashed a desperate thrust dealing ${actualPower} damage!`;
+            } else {
+                logMsg = `💥 Strike Hit! You executed ${move.name} and dealt ${actualPower} damage.`;
+            }
+
+            dHP = Math.max(0, dHP - actualPower);
             document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
-            document.getElementById('combat-log').textContent = `💥 Strike Hit! You executed ${move.name} and dealt ${move.power} damage.`;
+            
+            // Demon Mechanic Balance Boost: Vampiric leech framework
+            if (selectedFaction === 'demon' && move.name === "Flesh Bite") {
+                let leech = Math.floor(actualPower * 0.30); // Recover 30% of bite damage (~6 HP)
+                pHP = Math.min(maxPHP, pHP + leech);
+                logMsg = `💥 Strike Hit! You bit deep into the foe using ${move.name} for ${actualPower} damage and leeched 🩸 ${leech} HP!`;
+            }
+
+            document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
+            document.getElementById('combat-log').textContent = logMsg;
         }
 
         updateActionButtons();
@@ -265,7 +286,7 @@
             return;
         }
 
-        // --- ADAPTIVE SMART BOT TURN (FIXED FACTION LOOKUPS) ---
+        // --- ADAPTIVE SMART BOT TURN ---
         setTimeout(() => {
             if (pHP <= 0 || dHP <= 0) {
                 isTurnProcessing = false;
@@ -275,32 +296,26 @@
             let aiMoveName = "";
             let rawAiDamage = 0;
             
-            // 1. BRAIN: Counter Flag Intercept
             if (playerStates.isCountering && Math.random() > 0.15) { 
-                // If player is slayer, enemy is demon. If player is demon, enemy is slayer.
                 aiMoveName = selectedFaction === 'slayer' ? "Demon Focus Stance" : "Total Concentration Breathing";
                 rawAiDamage = 0; 
             } 
-            // 2. BRAIN: Execution Threshold Logic
             else if (pHP < 35) {
                 aiMoveName = selectedFaction === 'slayer' ? "Blood Art: Crimson Rent" : "Water Breathing: Constant Flux";
                 rawAiDamage = 26; 
             } 
-            // 3. BRAIN: Regular Base Move Scaling Rotation
             else {
                 if (selectedFaction === 'slayer') {
-                    // Enemy is a DEMON
                     aiMoveName = Math.random() > 0.4 ? "Violent Bite" : "Claw Rip";
                     rawAiDamage = aiMoveName === "Violent Bite" ? 15 : 10;
                 } else {
-                    // Enemy is a SLAYER
                     aiMoveName = Math.random() > 0.4 ? "Water Thrust Strike" : "Form 1: Horizontal Slash";
                     rawAiDamage = aiMoveName === "Water Thrust Strike" ? 16 : 11;
                 }
             }
 
-            // Progression scaling engine calculation
-            let damageMultiplier = 1 + (winStreak * 0.20);
+            // --- BALANCED GRADIENT PROGRESSION (Changed from 0.20 to 0.10) ---
+            let damageMultiplier = 1 + (winStreak * 0.10);
             rawAiDamage = Math.floor(rawAiDamage * damageMultiplier);
 
             let finalDamage = rawAiDamage;
