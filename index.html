@@ -153,6 +153,7 @@
         <div class="battle-arena" id="arena-border">
             <h2 id="enemy-name" class="enemy-title">Opponent</h2>
             <div id="enemy-hp" class="hp-bar">HP: 100 / 100</div>
+            <div id="enemy-stamina-display" style="color: #eab308; font-size: 0.9rem; font-weight: bold; margin-top: 4px;">Opponent Stamina: 100 / 100</div>
         </div>
         
         <div id="streak-display" class="streak-counter">WIN STREAK: 0 | BOT DAMAGE: +0%</div>
@@ -186,6 +187,7 @@
     let pHP = 100, maxPHP = 100;
     let dHP = 100, maxDHP = 100;
     let pStamina = 100, maxStamina = 100;
+    let dStamina = 100, maxDStamina = 100;
     let isTurnProcessing = false;
     let selectedFaction = "";
     let winStreak = 0;
@@ -221,7 +223,8 @@
     function selectFaction(faction) {
         selectedFaction = faction;
         moves = factionData[faction].moves;
-        pStamina = 100; // Fresh start
+        pStamina = 100; 
+        dStamina = 100;
 
         document.getElementById('arena-border').style.borderColor = factionData[faction].arenaColor;
         document.getElementById('faction-screen').style.display = 'none';
@@ -232,6 +235,7 @@
 
     function setupMatch() {
         dHP = 100;
+        dStamina = 100;
         isTurnProcessing = false;
 
         playerStates.isBlocking = false;
@@ -240,6 +244,7 @@
         
         document.getElementById('enemy-name').textContent = `${factionData[selectedFaction].enemyPrefix}${winStreak + 1}`;
         document.getElementById('enemy-hp').textContent = `HP: ${dHP} / ${maxDHP}`;
+        document.getElementById('enemy-stamina-display').textContent = `Opponent Stamina: ${dStamina} / ${maxDStamina}`;
         document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
         
         document.getElementById('streak-display').textContent = `WIN STREAK: ${winStreak} | BOT DAMAGE: +${winStreak * 10}%`;
@@ -367,6 +372,8 @@
 
             let aiMoveName = "";
             let rawAiDamage = 0;
+            let aiCost = 0;
+            let aiIsResting = false;
             
             let botGreedFactor = (dHP - pHP) / 100; 
             if (playerStates.isResting) { botGreedFactor = 1.0; }
@@ -374,31 +381,52 @@
             let dodgeChanceBase = 0.35; 
             let finalDodgeChance = Math.max(0.0, dodgeChanceBase - botGreedFactor); 
 
-            if (playerStates.isCountering && Math.random() > finalDodgeChance) { 
+            // AI STAMINA MANAGEMENT CHECK
+            if (dStamina < 20) {
+                // Opponent is low on reserves and MUST rest to regenerate stamina
+                aiMoveName = selectedFaction === 'slayer' ? "Deep Hibernation Rest" : "Total Concentration Breath";
+                aiCost = -50; 
+                rawAiDamage = 0;
+                aiIsResting = true;
+            } 
+            else if (playerStates.isCountering && Math.random() > finalDodgeChance) { 
                 if (selectedFaction === 'slayer') {
                     aiMoveName = "Blood Lust Desperation Claw";
                     rawAiDamage = 16;
+                    aiCost = 20;
                 } else {
                     aiMoveName = "Furious Heavy Strike";
                     rawAiDamage = 18;
+                    aiCost = 20;
                 }
             } 
             else if (playerStates.isCountering) {
                 aiMoveName = selectedFaction === 'slayer' ? "Demon Focus Stance" : "Total Concentration Breathing";
                 rawAiDamage = 0; 
+                aiCost = 15;
             } 
-            else if (pHP < 35 && !playerStates.isResting) {
+            else if (pHP < 35 && !playerStates.isResting && dStamina >= 40) {
                 aiMoveName = selectedFaction === 'slayer' ? "Blood Art: Crimson Rent" : "Water Breathing: Constant Flux";
                 rawAiDamage = 26; 
+                aiCost = 40;
             } 
             else {
                 if (selectedFaction === 'slayer') {
                     aiMoveName = Math.random() > 0.4 ? "Violent Bite" : "Claw Rip";
                     rawAiDamage = aiMoveName === "Violent Bite" ? 15 : 10;
+                    aiCost = aiMoveName === "Violent Bite" ? 20 : 15;
                 } else {
                     aiMoveName = Math.random() > 0.4 ? "Water Thrust Strike" : "Form 1: Horizontal Slash";
                     rawAiDamage = aiMoveName === "Water Thrust Strike" ? 16 : 11;
+                    aiCost = aiMoveName === "Water Thrust Strike" ? 20 : 15;
                 }
+            }
+
+            // Adjust opponent stamina pool dynamics
+            if (aiIsResting) {
+                dStamina = Math.min(maxDStamina, dStamina + Math.abs(aiCost));
+            } else {
+                dStamina -= aiCost;
             }
 
             let damageMultiplier = 1 + (winStreak * 0.10);
@@ -407,7 +435,9 @@
             let finalDamage = rawAiDamage;
             let logMessage = "";
 
-            if (rawAiDamage === 0) {
+            if (aiIsResting) {
+                logMessage = `💨 Breathing Phase! The opponent was dangerously low on energy and dropped back to perform ${aiMoveName}, regaining +50 Stamina! They are wide open!`;
+            } else if (rawAiDamage === 0) {
                 logMessage = `🧠 Smart AI! The opponent tracked your stance layout, backed off safely, and used ${aiMoveName}.`;
             } else if (playerStates.isCountering) {
                 finalDamage = 0;
@@ -432,6 +462,7 @@
 
             pHP = Math.max(0, pHP - finalDamage);
             document.getElementById('player-hp').textContent = `Your HP: ${pHP} / ${maxPHP}`;
+            document.getElementById('enemy-stamina-display').textContent = `Opponent Stamina: ${dStamina} / ${maxDStamina}`;
             document.getElementById('combat-log').textContent = logMessage;
             
             isTurnProcessing = false;
