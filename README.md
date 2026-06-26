@@ -30,7 +30,7 @@ Players are not locked into one point of view. The engine allows you to experime
 
 ## 🤝 Credits & Acknowledgments
 
-A massive shoutout to my friend **Rudrnash**! 
+A massive shoutout to my friend **Rudransh**! 
 
 > This project, its unique faction ideas, and the underlying concept of balancing tactical slayers against evolving demon threats wouldn't have come together without his insight and collaborative inspiration. 
 
